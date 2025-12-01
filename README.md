@@ -78,10 +78,21 @@ macOS / Linux:
 
 ### 3. Install dependencies
 
-Install all required Python packages:
+Run the following command to install the required libraries:
 
 ```bash
-pip install -r requirements.txt
+pip install pdfplumber sentence-transformers faiss-cpu
+```
+
+### Dependency Versions
+
+This project was developed and tested with the following versions:
+
+```text
+Python 3.12.6
+pdfplumber 0.11.8
+sentence-transformers 5.1.2
+faiss-cpu 1.13.0
 ```
 
 ### Adding Your Documents
