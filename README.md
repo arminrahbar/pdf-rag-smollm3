@@ -78,7 +78,7 @@ macOS / Linux:
 
 ### 3. Install dependencies
 
-Run the following command to install the required libraries:
+Run the following command to install the required libraries. a
 
 ```bash
 pip install pdfplumber sentence-transformers faiss-cpu
