@@ -58,7 +58,7 @@ Follow these steps to run the project locally.
 
 #### 1. Clone the repository
 
-```bash
+```text
 git clone https://github.com/arminrahbar/pdf-rag-smollm3.git
 cd pdf-rag-smollm3
 ```
@@ -68,19 +68,23 @@ cd pdf-rag-smollm3
 
 Windows (PowerShell):
 
-    python -m venv .venv
-    .\.venv\Scripts\Activate.ps1
+```text
+python -m venv .venv
+.\.venv\Scripts\Activate.ps1
+```
 
 macOS / Linux:
 
-    python3 -m venv .venv
-    source .venv/bin/activate
+```text
+python3 -m venv .venv
+source .venv/bin/activate
+```
 
 ### 3. Install dependencies
 
-Run the following command to install the required libraries. a
+Run the following command to install the required libraries.
 
-```bash
+```text
 pip install pdfplumber sentence-transformers faiss-cpu
 ```
 
@@ -115,8 +119,9 @@ They will never be uploaded to GitHub.
 
 Run the ingestion script to process your PDFs:
 
-    python -m src.ingest
-
+```text
+python -m src.ingest
+```
 
 This will:
 
@@ -131,7 +136,6 @@ Output files created in `data/`:
     embeddings.npy
     metadata.json
 
-
 These files are automatically ignored by git.
 
 ---
@@ -140,4 +144,6 @@ These files are automatically ignored by git.
 
 Ask natural language questions about your documents:
 
-    python -m src.query
+```text
+python -m src.query
+```
