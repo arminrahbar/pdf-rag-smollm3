@@ -42,7 +42,6 @@ pdf-rag-smollm3/
 │   └── __init__.py
 │
 ├── .gitignore
-├── requirements.txt
 └── README.md
 
 ```
