@@ -6,5 +6,6 @@ __pycache__/
 
 data/*.npy
 data/*.faiss
+data/metadata.json
 
 .env
