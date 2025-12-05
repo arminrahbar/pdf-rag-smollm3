@@ -2,8 +2,9 @@ from pathlib import Path
 import json
 
 import numpy as np
-import faiss
-from sentence_transformers import SentenceTransformer
+import faiss # type: ignore
+from sentence_transformers import SentenceTransformer # type: ignore
+
 
 
 DATA_DIR = Path("data")

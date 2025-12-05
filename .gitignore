@@ -9,3 +9,9 @@ data/*.faiss
 data/metadata.json
 
 .env
+
+# Title model experiments
+src/titles.py
+src/train_title_model.py
+data/title_training_data.csv
+models/

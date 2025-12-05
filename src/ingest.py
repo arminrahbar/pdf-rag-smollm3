@@ -1,10 +1,10 @@
 from pathlib import Path
 import json
 
-import pdfplumber
-from sentence_transformers import SentenceTransformer
+import pdfplumber # type: ignore
+from sentence_transformers import SentenceTransformer # type: ignore
 import numpy as np
-import faiss
+import faiss # type: ignore
 
 
 def extract_pages(pdf_path: Path):
