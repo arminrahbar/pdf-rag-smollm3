@@ -15,3 +15,14 @@ src/titles.py
 src/train_title_model.py
 data/title_training_data.csv
 models/
+
+
+src/langchain/langchain_query_hf.py.txt
+src/langchain/rag_langchain_hf.py.txt
+src/langchain/chains.py
+src/langchain/config.py
+src/langchain/ingest.py
+src/langchain/llm.py
+src/langchain/main.py
+src/langchain/prompts.py
+src/langchain/retriever.py

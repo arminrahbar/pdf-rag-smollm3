@@ -1,13 +1,12 @@
-# ingest.py
-
+# ingest_module.py (Refactored Ingestion Logic)
 from pathlib import Path
 import json
 
-import pdfplumber # type: ignore
-from sentence_transformers import SentenceTransformer # type: ignore
+import pdfplumber
+from sentence_transformers import SentenceTransformer
 import numpy as np
-import faiss # type: ignore
-
+import faiss
+from typing import List, Dict, Tuple, Any
 
 def extract_pages(pdf_path: Path):
     pages = []
@@ -112,7 +111,7 @@ if __name__ == "__main__":
     all_chunks = []
 
     for pdf_path in pdf_paths:
-        doc_id = pdf_path.stem      # "my_paper_1" or "my_paper_2"
+        doc_id = pdf_path.stem
         title = doc_id
         print(f"Processing {pdf_path.name} as doc_id={doc_id}")
         pages = extract_pages(pdf_path)
@@ -124,3 +123,36 @@ if __name__ == "__main__":
     save_index(index, emb, all_chunks, data_dir, model_name)
 
     print(f"Processed {len(pdf_paths)} PDFs and created {len(all_chunks)} chunks")
+
+def run_ingestion_pipeline(data_dir: Path) -> Tuple[Any, List[Dict[str, Any]], Any]:
+    """
+    Runs the full ingestion pipeline, saves the index, and returns the loaded resources.
+    
+    Returns: (index, chunks, embed_model)
+    """
+    # collect all pdfs in data
+    pdf_paths = sorted(data_dir.glob("*.pdf"))
+    if not pdf_paths:
+        raise RuntimeError(f"No PDF files found in {data_dir}. Place PDFs inside.")
+
+    all_chunks = []
+
+    for pdf_path in pdf_paths:
+        doc_id = pdf_path.stem
+        title = doc_id
+        print(f"Processing {pdf_path.name} as doc_id={doc_id}...")
+        pages = extract_pages(pdf_path)
+        # Use your custom chunking parameters
+        chunks = chunk_pages(pages, doc_id=doc_id, title=title, chunk_char_len=1200, chunk_overlap=200)
+        all_chunks.extend(chunks)
+
+    # Building and saving the index
+    emb, model_name = build_embeddings(all_chunks)
+    index = build_faiss_index(emb)
+    save_index(index, emb, all_chunks, data_dir, model_name)
+
+    print(f"Processed {len(pdf_paths)} PDFs and created {len(all_chunks)} chunks.")
+    
+    # Return the resources needed for querying
+    embed_model = SentenceTransformer(model_name)
+    return index, all_chunks, embed_model

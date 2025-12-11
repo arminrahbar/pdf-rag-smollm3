@@ -1,3 +1,4 @@
+# langchain_query_hf.py - HuggingFace Inference API Version
 from pathlib import Path
 import json
 import textwrap
@@ -7,37 +8,40 @@ import numpy as np
 import faiss
 from sentence_transformers import SentenceTransformer
 from dotenv import load_dotenv
-from openai import OpenAI
-import torch
+from openai import OpenAI   
+from huggingface_hub import InferenceClient, login
+
+from .ingest_module import run_ingestion_pipeline
 
 # Load variables from .env file (expects HF_TOKEN=... in there)
 load_dotenv()
+HF_TOKEN = os.getenv("HF_TOKEN")
+if HF_TOKEN:
+    login(token=HF_TOKEN)
 
 # CONFIGURATION
 DATA_DIR = Path("data")
 HF_API_BASE = "https://router.huggingface.co/v1"
 MODEL_ID = "HuggingFaceTB/SmolLM3-3B:hf-inference"
-DEVICE = "cuda" if torch.cuda.is_available() else "cpu"  # info only; HF runs the LLM
 K_NEIGHBORS = 5  # how many nearest chunks to use as context
 
 
 def load_resources():
-    """Load FAISS index and embedding model created by ingest.py."""
+    """Load FAISS index and embedding model, or run ingestion if files are missing."""
     index_path = DATA_DIR / "index.faiss"
     emb_path = DATA_DIR / "embeddings.npy"
     meta_path = DATA_DIR / "metadata.json"
 
-    if not index_path.exists():
-        raise FileNotFoundError(f"Missing {index_path}. Run ingest.py first!")
-    if not emb_path.exists():
-        raise FileNotFoundError(f"Missing {emb_path}. Run ingest.py first!")
-    if not meta_path.exists():
-        raise FileNotFoundError(f"Missing {meta_path}. Run ingest.py first!")
-
+    # Check if index and metadata exist
+    if not index_path.exists() or not meta_path.exists():
+        print("Index files not found. Running full ingestion pipeline now...")
+        # CALL THE NEW MASTER INGESTION FUNCTION
+        return run_ingestion_pipeline(DATA_DIR)
+        
+    # Standard Loading (if files exist)
     print("Loading vector database...")
     index = faiss.read_index(str(index_path))
-    embeddings = np.load(emb_path)
-
+    
     with open(meta_path, "r", encoding="utf8") as f:
         meta = json.load(f)
 
@@ -45,11 +49,10 @@ def load_resources():
     model_name = meta["embed_model_name"]
     embed_model = SentenceTransformer(model_name)
 
-    return index, embeddings, chunks, embed_model
+    return index, chunks, embed_model
 
 
 def load_llm():
-    """Create an OpenAI style client that talks to Hugging Face Inference."""
     token = os.getenv("HF_TOKEN")
     if not token:
         raise RuntimeError(
@@ -63,6 +66,7 @@ def load_llm():
         api_key=token,
     )
     return client
+
 
 
 def search(query, index, chunks, embed_model, k=K_NEIGHBORS):
@@ -99,7 +103,7 @@ def search(query, index, chunks, embed_model, k=K_NEIGHBORS):
 
 
 def generate_rag_answer(llm_client, query, retrieved_chunks):
-    """Generate an answer using SmolLM3 and the retrieved context."""
+    """Generate an answer using HuggingFace Inference API and the retrieved context."""
     if not retrieved_chunks:
         return "I could not find any relevant context in the documents."
 
@@ -140,26 +144,32 @@ def generate_rag_answer(llm_client, query, retrieved_chunks):
         },
     ]
 
-    # 3. Call Hugging Face through the OpenAI compatible client
-    completion = llm_client.chat.completions.create(
-        model=MODEL_ID,
+    # 3. Call HuggingFace Inference API
+    response = llm_client.chat_completion(
         messages=messages,
         max_tokens=900,
         temperature=0.3,
         top_p=0.9,
     )
-
-    answer = completion.choices[0].message.content
-    return answer.strip()
+    
+    # 4. Extract answer from response
+    answer = response.choices[0].message.content
+    
+    # Remove <think> tags if present
+    import re
+    answer = re.sub(r'<think>.*?</think>', '', answer, flags=re.IGNORECASE | re.DOTALL).strip()
+    
+    return answer
 
 
 if __name__ == "__main__":
     # Load index and embedding model once
-    index, embeddings, chunks, embed_model = load_resources()
+    index, chunks, embed_model = load_resources()
     llm_client = load_llm()
 
     print("\n" + "=" * 50)
     print(f"SmolLM3 Research Assistant Ready ({len(chunks)} chunks loaded)")
+    print("Using HuggingFace Inference API")
     print("=" * 50)
 
     while True:
