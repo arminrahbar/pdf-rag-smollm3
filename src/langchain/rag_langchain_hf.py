@@ -152,7 +152,7 @@ class CleanOutputParser(StrOutputParser):
             answer = text.strip()
         
         return answer
-
+    
 
 # Create Routed Chain (RAG vs Direct)
 def create_routed_chain(llm_client, retriever, router):
@@ -167,7 +167,7 @@ def create_routed_chain(llm_client, retriever, router):
             completion = self.client.chat.completions.create(
                 model=MODEL_ID,
                 messages=[{"role": "user", "content": prompt}],
-                max_tokens=900,
+                max_tokens=2000,
                 temperature=0.3,
                 top_p=0.9,
             )
@@ -247,6 +247,36 @@ Answer:"""
     
     return full_chain
 
+def print_sources_from_docs(docs):
+    print("\nSOURCES:")
+    print("-" * 20)
+    if not docs:
+        print("No relevant chunks found in the documents.")
+        print("-" * 20)
+        return
+
+    for i, doc in enumerate(docs, start=1):
+        doc_id = doc.metadata.get("doc_id", "unknown_doc")
+        page_start = doc.metadata.get("page_start")
+        page_end = doc.metadata.get("page_end")
+        distance = doc.metadata.get("distance_score", None)
+
+        if page_start == page_end:
+            page_str = f"{page_start}"
+        else:
+            page_str = f"{page_start}-{page_end}"
+
+        if distance is not None:
+            print(
+                f"[{i}] {doc_id} "
+                f"(pages {page_str}) "
+                f"(distance {distance:.4f})"
+            )
+        else:
+            print(f"[{i}] {doc_id} (pages {page_str})")
+    print("-" * 20)
+
+
 if __name__ == "__main__":
     print("\n" + "=" * 60)
     print("Loading resources...")
@@ -268,7 +298,7 @@ if __name__ == "__main__":
 
     print("\n" + "=" * 60)
     print("LangChain RAG Router Ready (HuggingFace Inference API)")
-    print("Distance-based routing: Close to corpus → RAG, Far → Direct")
+    print("Distance-based routing: Close to corpus -> RAG, Far -> Direct")
     print("=" * 60)
 
     while True:
@@ -280,16 +310,29 @@ if __name__ == "__main__":
                 continue
 
             print("\n[Routing...]")
-            
-            # Call the routed chain
+
+            # Decide routing here as well so you know whether RAG was used
+            use_rag = router.should_use_rag(query)
+
+            # Call the routed chain (still does its own routing)
             answer = chain({"question": query})
 
             print("\nAnswer:")
             print("-" * 20)
-            print(answer)  # instead of textwrap.fill(answer, width=80)
+            print(answer)
             print("-" * 20)
             print("Answer length:", len(answer))
 
+            # Print sources in the same style as the non LangChain version
+            if not use_rag:
+                print("\nSOURCES:")
+                print("-" * 20)
+                print("Answered from model's general knowledge only (no PDFs used).")
+                print("-" * 20)
+            else:
+                # Retrieve the same top-k docs and print their doc_id and page range
+                context_docs = retriever.invoke(query)
+                print_sources_from_docs(context_docs)
 
         except KeyboardInterrupt:
             break

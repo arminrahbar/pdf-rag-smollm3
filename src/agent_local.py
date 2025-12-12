@@ -1,4 +1,4 @@
-# agent_local.py
+# src/agent_local.py
 
 from query_local import load_resources, search, load_llm
 
