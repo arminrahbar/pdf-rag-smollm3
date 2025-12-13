@@ -26,3 +26,10 @@ src/langchain/llm.py
 src/langchain/main.py
 src/langchain/prompts.py
 src/langchain/retriever.py
+
+
+src/query_local.py
+src/agent_local.py
+src/langchain/langchain_query_local.py
+src/langchain/rag_langchain_local.py
+src/mcp_server_simple_agent.py
