@@ -12,14 +12,13 @@ from dotenv import load_dotenv
 from openai import OpenAI
 import torch
 
-# Load variables from .env file (expects HF_TOKEN=... in there)
+# Load variables from .env file (expects HF_TOKEN in there)
 load_dotenv()
 
-# CONFIGURATION
 DATA_DIR = Path("data")
 HF_API_BASE = "https://router.huggingface.co/v1"
 MODEL_ID = "HuggingFaceTB/SmolLM3-3B:hf-inference"
-DEVICE = "cuda" if torch.cuda.is_available() else "cpu"  # info only; HF runs the LLM
+DEVICE = "cuda" if torch.cuda.is_available() else "cpu"  
 K_NEIGHBORS = 5  # how many nearest chunks to use as context
 
 
@@ -70,27 +69,37 @@ def load_llm():
 def search(query, index, chunks, embed_model, k=K_NEIGHBORS):
     """
     Search the FAISS index for relevant chunks.
-
-    Returns a list of dicts that include:
-        rank, score, doc_id, page_start, page_end, text, title, chunk_id
     """
+    
+    # creates vector for the query
     q_emb = embed_model.encode([query], convert_to_numpy=True)
     q_emb = q_emb.astype("float32")
 
+    # searches the index object for the nearest 5 vectors
+    # to the query vector
     distances, indices = index.search(q_emb, k)
 
     results = []
+    # iterataes through the 5 nearest neighbor indices for 
+    # query vector
     for rank, idx in enumerate(indices[0]):
         if idx == -1:
             continue
+        #converts from numpy integer type to regular python int
         idx = int(idx)
+        # gets the chunk dictionary at current index
         chunk = chunks[idx]
+        # adds this chuck to the results
         results.append(
             {
                 "rank": rank + 1,
+                # the distance to the query vector, convert to regular float
                 "score": float(distances[0][rank]),
+                # name of pdf file
                 "doc_id": chunk["doc_id"],
+                # name of the pdf
                 "title": chunk.get("title", chunk["doc_id"]),
+                # chunk's id
                 "chunk_id": chunk["chunk_id"],
                 "page_start": chunk["page_start"],
                 "page_end": chunk["page_end"],
@@ -106,6 +115,7 @@ def generate_rag_answer(llm_client, query, retrieved_chunks):
         return "I could not find any relevant context in the documents."
 
     # 1. Prepare context text from search results, with doc and page info
+    # builds context that's made up of the chunks and their doc name, start page and end page.
     context_text = ""
     for i, chunk in enumerate(retrieved_chunks):
         snippet = chunk["text"][:1000]  # limit each chunk length
@@ -123,7 +133,9 @@ def generate_rag_answer(llm_client, query, retrieved_chunks):
             f"{snippet}\n\n"
         )
 
-    # 2. Build messages for chat completion
+    
+    # creates a system instruction message
+    # creates a user message that includes the retrieved context and the query
     messages = [
         {
             "role": "system",
@@ -142,7 +154,8 @@ def generate_rag_answer(llm_client, query, retrieved_chunks):
         },
     ]
 
-    # 3. Call Hugging Face through the OpenAI compatible client
+    # sends messages to hugging face inference point
+    # through an OpenAI compatible client
     completion = llm_client.chat.completions.create(
         model=MODEL_ID,
         messages=messages,
@@ -151,54 +164,6 @@ def generate_rag_answer(llm_client, query, retrieved_chunks):
         top_p=0.9,
     )
 
+    # gets the models response
     answer = completion.choices[0].message.content
     return answer.strip()
-
-
-if __name__ == "__main__":
-    # Load index and embedding model once
-    index, embeddings, chunks, embed_model = load_resources()
-    llm_client = load_llm()
-
-    print("\n" + "=" * 50)
-    print(f"SmolLM3 Research Assistant Ready ({len(chunks)} chunks loaded)")
-    print("=" * 50)
-
-    while True:
-        try:
-            query = input("\nAsk a question (or 'q' to quit): ").strip()
-            if query.lower() in ["q", "quit", "exit"]:
-                break
-            if not query:
-                continue
-
-            print("Searching documents...")
-            hits = search(query, index, chunks, embed_model, k=K_NEIGHBORS)
-
-            print("Thinking...")
-            answer = generate_rag_answer(llm_client, query, hits)
-
-            print("\nANSWER:")
-            print("-" * 20)
-            print(textwrap.fill(answer, width=80))
-            print("-" * 20)
-
-            # Print sources with doc id and page numbers
-            print("\nSOURCES:")
-            print("-" * 20)
-            for h in hits:
-                if h["page_start"] == h["page_end"]:
-                    page_str = f"{h['page_start']}"
-                else:
-                    page_str = f"{h['page_start']}-{h['page_end']}"
-                print(
-                    f"[{h['rank']}] {h['doc_id']} "
-                    f"(pages {page_str}) "
-                    f"(distance {h['score']:.4f})"
-                )
-            print("-" * 20)
-
-        except KeyboardInterrupt:
-            break
-        except Exception as e:
-            print(f"Error: {e}")

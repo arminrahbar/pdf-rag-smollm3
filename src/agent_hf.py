@@ -21,7 +21,7 @@ HIGH_DISTANCE = 1.7  # "far from corpus" -> DIRECT
 # Whether to use the LLM as a router in the grey zone
 USE_LLM_ROUTER = False
 
-
+# just related to cleaning up the answer returned by model.
 def strip_think(text: str) -> str:
     """
     Remove any <think>...</think> segments from model output, even if truncated.
@@ -33,12 +33,9 @@ def strip_think(text: str) -> str:
         r"<think>.*?(</think>|$)", "", text, flags=re.IGNORECASE | re.DOTALL
     ).strip()
 
-
+# function is to help the system not print sources if answer is not
+# based on context
 def answer_says_no_context(answer: str) -> bool:
-    """
-    Heuristic detector: does the RAG answer explicitly say that
-    the documents or context do not cover the question.
-    """
     text = answer.lower()
     patterns = [
         "the provided documents do not",
@@ -64,6 +61,8 @@ class SimpleAgent:
         print("Connecting to SmolLM3 on Hugging Face...")
         self.llm_client = load_llm()
 
+    # calls the search function defined in query_hf file
+    # formats the results 
     def search_pdf(self, query: str):
         """Tool: Search the PDF knowledge base."""
         hits = search(query, self.index, self.chunks, self.embed_model, k=K_NEIGHBORS)
@@ -87,6 +86,7 @@ class SimpleAgent:
 
         return result_text, hits
 
+    # measures how close the question is to vector embeddings, meaaning to the context
     def corpus_distance(self, question: str, k: int = 5):
         """
         Compute how close the question is to the existing corpus in embedding space.
@@ -98,12 +98,19 @@ class SimpleAgent:
         q_emb = self.embed_model.encode([question], convert_to_numpy=True).astype(
             "float32"
         )
+        # searches the index for the k (in this case 5) nearest neighbor vectors to the question vector
         distances, indices = self.index.search(q_emb, k)
+        # gets the distances for those 5 neighbors for this one query
         top = distances[0]
+        # gets the distance to the closest neighbor
         best = float(top[0])
+        # gets the mean distance across the top 5 neighbors
         mean_top = float(top.mean())
+        # returns the closest distance and the mean of the 5 nearest
         return best, mean_top
 
+    # create system systems that directs it to answer without relying on context
+    # creates user message that contains only the question, without any context
     def generate_direct_answer(self, question: str) -> str:
         """Answer using the model's own knowledge only, no PDFs."""
         messages = [
@@ -120,6 +127,8 @@ class SimpleAgent:
             },
         ]
 
+        # sends messages to hugging face inference point
+        # through an OpenAI compatible client
         completion = self.llm_client.chat.completions.create(
             model=MODEL_ID,
             messages=messages,
@@ -128,22 +137,15 @@ class SimpleAgent:
             top_p=0.9,
         )
 
+        # gets the answer from the model
         raw = completion.choices[0].message.content or ""
         return strip_think(raw)
 
-
+    # Decide if this question should use the PDFs (RAG) or not.
     def should_use_rag(self, question: str) -> bool:
-        """
-        Decide if this question should use the PDFs (RAG) or not.
-
-        Logic:
-          1) If user explicitly asks to use PDFs or papers, force RAG.
-          2) Otherwise use embedding distance to corpus.
-          3) If in grey zone and USE_LLM_ROUTER is True, ask LLM router as tie breaker.
-        """
         q_lower = question.lower()
 
-        # 1. Explicit user request to ground in PDFs
+        # indicates user wants context based answer
         explicit_pdf_phrases = [
             "based on the pdf",
             "based on the pdfs",
@@ -163,18 +165,25 @@ class SimpleAgent:
             return True
 
         # 2. Distance based routing
+        # gets the distance of question to the nearest 5 neighbors
+        # gets the mean distance of the top 5 neighbors
+        # also the distance of the closest neighbor
         best, mean_top = self.corpus_distance(question, k=K_NEIGHBORS)
         print(
             f"[Router] Distances for question: best={best:.3f}, "
             f"mean_top={mean_top:.3f}"
         )
 
+        # LOW_DISTANCE = 1.2   # "near corpus" -> RAG
+        # HIGH_DISTANCE = 1.7  # "far from corpus" -> DIRECT
+        # if mean distance of the 5 nearest neighbors is lower than 1.2, use RAG
         if mean_top < LOW_DISTANCE:
             print(
                 f"[Router] mean distance {mean_top:.3f} < {LOW_DISTANCE}, using RAG."
             )
             return True
-
+        
+        # if mean distance of the 5 nearest neighbors is higher than 1.7, answer without RAG
         if mean_top > HIGH_DISTANCE:
             print(
                 f"[Router] mean distance {mean_top:.3f} > {HIGH_DISTANCE}, "
@@ -182,6 +191,9 @@ class SimpleAgent:
             )
             return False
 
+        # the grey zone was problematic, so all questiosn that fall in the 
+        # grey zone for now are answered without using RAG. 
+        # there is an area for improvement
         # 3. Grey zone
         if not USE_LLM_ROUTER:
             print(
@@ -196,43 +208,52 @@ class SimpleAgent:
         )
         return self.should_use_rag_via_llm(question)
 
+
+    # agent’s main controller. 
+    # It decides RAG vs direct, then runs the appropriate path 
+    # and returns the final answer
     def run_query(self, question: str):
-        """
-        Run a routed query:
 
-          - If router says DIRECT: answer from model only, no PDFs.
-          - If router says RAG: search PDFs and answer with retrieved context.
-
-        Returns:
-            answer (str),
-            hits (list of chunks, or [] if no RAG),
-            used_rag (bool)
-        """
         print(f"\n[Agent] Received question: {question}")
 
         print("[Agent] Deciding whether to use RAG or direct model answer...")
         use_rag = self.should_use_rag(question)
-
+        
+        
+        # three cases:
+        #   Direct path: answer from model only
+        #   RAG path: no chunks retrieved, 
+        #   RAG path: chunks retrieved, generate answer from context
+        
+        
+        # if use_rag is false, the agent chose the direct path
         if not use_rag:
             print("[Agent] Using direct model answer (no PDFs).")
             answer = self.generate_direct_answer(question)
+            # False means the agent did not use RAG
             return answer, [], False
 
         # RAG path
         print("[Agent] Using RAG: searching PDFs for relevant context...")
+        # Search the PDF index for nearest chunks
         search_result, hits = self.search_pdf(question)
         print(search_result)
 
+        # if hits is empty, retrieval returned no chunks
         if not hits:
             print("[Agent] No relevant chunks found in the documents.")
+            # true means the agent chose the RAG route, but retrieval failed
             return "I could not find relevant information in the documents.", [], True
 
+        # otherwise generate the answer from the retrieved chunks
         print("[Agent] Generating answer from retrieved context...")
         raw_answer = generate_rag_answer(self.llm_client, question, hits)
         answer = strip_think(raw_answer)
         return answer, hits, True
 
 
+
+# a runnable command line program for testing and demo.
 if __name__ == "__main__":
     print("\n" + "=" * 60)
     print("Agentic Research Assistant Ready (HF SmolLM3 + RAG router)")
