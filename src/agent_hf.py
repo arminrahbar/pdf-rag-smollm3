@@ -131,54 +131,6 @@ class SimpleAgent:
         raw = completion.choices[0].message.content or ""
         return strip_think(raw)
 
-    # def should_use_rag_via_llm(self, question: str) -> bool:
-    #     """
-    #     Grey zone router: ask the LLM to choose DIRECT vs RAG.
-
-    #     Returns True for RAG, False for DIRECT.
-    #     """
-    #     messages = [
-    #         {
-    #             "role": "system",
-    #             "content": (
-    #                 "You are a router for a research assistant.\n"
-    #                 "Decide if this question requires consulting the uploaded PDF "
-    #                 "documents.\n"
-    #                 "Answer DIRECT if you can answer confidently from your own general "
-    #                 "knowledge without reading the PDFs.\n"
-    #                 "Answer RAG only if the question clearly depends on the specific "
-    #                 "uploaded articles, their figures, tables, methods, or detailed "
-    #                 "results, or explicitly refers to 'this paper', 'these PDFs', or "
-    #                 "their scientific findings.\n"
-    #                 "For generic background questions (for example 'what is biology', "
-    #                 "'what is data science', 'what is a protein'), prefer DIRECT.\n"
-    #                 "Reply with exactly one word: DIRECT or RAG."
-    #             ),
-    #         },
-    #         {"role": "user", "content": question},
-    #     ]
-
-    #     completion = self.llm_client.chat.completions.create(
-    #         model=MODEL_ID,
-    #         messages=messages,
-    #         max_tokens=16,
-    #         temperature=0.0,
-    #     )
-
-    #     reply = completion.choices[0].message.content or ""
-    #     reply_clean = strip_think(reply).strip().upper()
-
-    #     print(f"[Router raw reply] {repr(reply_clean)}")
-
-    #     # Clear cases
-    #     if "RAG" in reply_clean and "DIRECT" not in reply_clean:
-    #         return True
-    #     if "DIRECT" in reply_clean and "RAG" not in reply_clean:
-    #         return False
-
-    #     # Ambiguous or nonsense: default to DIRECT to avoid overusing RAG
-    #     print("[Router] Ambiguous router reply, defaulting to DIRECT.")
-    #     return False
 
     def should_use_rag(self, question: str) -> bool:
         """
